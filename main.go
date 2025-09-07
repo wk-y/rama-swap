@@ -4,6 +4,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"strings"
 
 	"github.com/wk-y/rama-swap/ramalama"
 )
@@ -15,10 +16,11 @@ func main() {
 	}
 	defer l.Close()
 
-	server := Server{
-		ramalama: &ramalama.Ramalama{
-			Command: []string{"uvx", "ramalama"},
-		},
+	server := NewServer(ramalama.Ramalama{
+		Command: []string{"uvx", "ramalama"},
+	})
+	server.ModelNameMangler = func(s string) string {
+		return strings.ReplaceAll(s, "/", "_")
 	}
 
 	server.HandleHttp(http.DefaultServeMux)
