@@ -1,6 +1,8 @@
 package main
 
 import (
+	"flag"
+	"fmt"
 	"log"
 	"net"
 	"net/http"
@@ -11,8 +13,15 @@ import (
 	"github.com/wk-y/rama-swap/server"
 )
 
+const defaultPort = 4917
+const defaultHost = "127.0.0.1"
+
 func main() {
-	l, err := net.Listen("tcp", "127.0.0.1:4917")
+	host := flag.String("host", defaultHost, "ip address to listen on")
+	port := flag.Int("port", defaultPort, "port to listen on")
+	flag.Parse()
+
+	l, err := net.Listen("tcp", fmt.Sprintf("%s:%d", *host, *port))
 	if err != nil {
 		log.Fatalf("Failed to listen: %v", err)
 	}
