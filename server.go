@@ -87,6 +87,7 @@ func (s *Server) proxyEndpoint(w http.ResponseWriter, r *http.Request, modelFind
 		log.Println("Failed to start model %s: %v", err)
 		return
 	}
+	<-backend.ready
 
 	proxy := httputil.ReverseProxy{
 		Rewrite: func(pr *httputil.ProxyRequest) {
@@ -245,10 +246,11 @@ func (s *Server) StartModel(name string) (*backend, error) {
 }
 
 func (b *backend) healthCheck() bool {
-	resp, err := http.Get(fmt.Sprintf("http://127.0.0.1:%v/v1/models", b.port))
+	// /health is more accurate but might be llama-server specific
+	resp, err := http.Get(fmt.Sprintf("http://127.0.0.1:%v/health", b.port))
 	if err != nil {
 		return false
 	}
 	resp.Body.Close()
-	return true
+	return resp.StatusCode == http.StatusOK
 }
