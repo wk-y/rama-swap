@@ -34,7 +34,7 @@ func NewServer(r ramalama.Ramalama) *Server {
 		ramalama:      r,
 		backends:      map[string]*backend{},
 		demangleCache: map[string]string{},
-		portManager:   *newPortManager(20050),
+		portManager:   *newPortManager(49170),
 	}
 }
 
