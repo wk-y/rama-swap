@@ -44,6 +44,9 @@ func main() {
 	}
 
 	server.HandleHttp(http.DefaultServeMux)
+
+	log.Printf("Listening on http://%s:%d\n", *host, *port)
 	err = http.Serve(l, nil)
+
 	log.Fatalf("Failed to serve: %v", err)
 }
