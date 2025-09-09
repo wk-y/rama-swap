@@ -104,6 +104,8 @@ func (s *Server) ollamaChat(w http.ResponseWriter, r *http.Request) {
 	})
 
 	responseEncoder := json.NewEncoder(w)
+	responseController := http.NewResponseController(w)
+	defer stream.Close()
 	for stream.Next() {
 		event := stream.Current()
 		if len(event.Choices) > 0 {
@@ -122,6 +124,9 @@ func (s *Server) ollamaChat(w http.ResponseWriter, r *http.Request) {
 				log.Printf("Failed to send delta: %v\n", err)
 				return
 			}
+
+			// Flush to reduce stream latency. Whether it succeeds isn't important.
+			_ = responseController.Flush()
 		}
 	}
 
