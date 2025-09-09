@@ -65,6 +65,7 @@ func (s *Server) HandleHttp(mux *http.ServeMux) {
 	})
 
 	mux.HandleFunc("POST /v1/chat/completions", s.handleChatCompletions)
+	mux.HandleFunc("POST /v1/completions", s.handleCompletions)
 
 	mux.HandleFunc("/upstream/{model}/{rest...}", s.serveUpstream)
 }
@@ -104,6 +105,25 @@ func (s *Server) proxyEndpoint(w http.ResponseWriter, r *http.Request, modelFind
 }
 
 func (s *Server) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
+	s.proxyEndpoint(w, r, func(body io.Reader) (model string, err error) {
+		var modelGet struct {
+			Model *string
+		}
+
+		err = json.NewDecoder(body).Decode(&modelGet)
+		if err != nil {
+			return
+		}
+
+		if modelGet.Model == nil {
+			return "", fmt.Errorf("missing model key")
+		}
+
+		return *modelGet.Model, nil
+	})
+}
+
+func (s *Server) handleCompletions(w http.ResponseWriter, r *http.Request) {
 	s.proxyEndpoint(w, r, func(body io.Reader) (model string, err error) {
 		var modelGet struct {
 			Model *string
