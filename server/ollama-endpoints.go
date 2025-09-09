@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/openai/openai-go/v2"
@@ -64,6 +65,7 @@ func (s *Server) ollamaChat(w http.ResponseWriter, r *http.Request) {
 	log.Println(r.URL)
 
 	var requestJson ollamatypes.ChatRequest
+	requestJson.Stream = true // default value
 
 	rDecoder := json.NewDecoder(r.Body)
 	err := rDecoder.Decode(&requestJson)
@@ -102,13 +104,20 @@ func (s *Server) ollamaChat(w http.ResponseWriter, r *http.Request) {
 		Messages: messages,
 		Model:    model,
 	})
+	defer stream.Close()
 
 	responseEncoder := json.NewEncoder(w)
 	responseController := http.NewResponseController(w)
-	defer stream.Close()
+	var accumulator strings.Builder
+
 	for stream.Next() {
 		event := stream.Current()
 		if len(event.Choices) > 0 {
+			if requestJson.Stream == false {
+				accumulator.WriteString(event.Choices[0].Delta.Content)
+				continue
+			}
+
 			ollamaEvent := ollamatypes.ChatResponse{
 				Model:     model,
 				CreatedAt: time.Unix(event.Created, 0).Format(time.RFC3339),
@@ -141,7 +150,7 @@ func (s *Server) ollamaChat(w http.ResponseWriter, r *http.Request) {
 			CreatedAt: time.Now().UTC().Format(time.RFC3339),
 			Message: ollamatypes.Message{
 				Role:    "assistant",
-				Content: "",
+				Content: accumulator.String(),
 			},
 			Done: true,
 			// todo: fill out all the other fields
