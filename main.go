@@ -4,6 +4,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"os"
 	"strings"
 
 	"github.com/wk-y/rama-swap/ramalama"
@@ -16,9 +17,18 @@ func main() {
 	}
 	defer l.Close()
 
+	ramalamaCommand := []string{"ramalama"}
+	if env := os.Getenv("RAMALAMA_COMMAND"); env != "" {
+		ramalamaCommand = strings.Split(env, " ")
+		if len(ramalamaCommand) == 0 {
+			log.Fatalln("RAMALAMA_COMMAND environment variable should not be all whitespace")
+		}
+	}
+
 	server := NewServer(ramalama.Ramalama{
-		Command: []string{"uvx", "ramalama"},
+		Command: ramalamaCommand,
 	})
+
 	server.ModelNameMangler = func(s string) string {
 		return strings.ReplaceAll(s, "/", "_")
 	}
