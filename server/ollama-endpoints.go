@@ -142,6 +142,4 @@ func (s *Server) ollamaChat(w http.ResponseWriter, r *http.Request) {
 			// todo: fill out all the other fields
 		},
 	})
-
-	w.Header().Add("Content-Type", "application/json; charset=utf-8")
 }
