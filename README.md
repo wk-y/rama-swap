@@ -20,5 +20,10 @@ The following OpenAI compatible endpoints are proxied to the underlying ramalama
 - [x] `/v1/completions`
 - [x] `/v1/chat/completions`
 
+Ollama-compatible endpoints are a work in progress:
+
+- [x] `/api/version` (dummy)
+- [x] `/api/tags`
+
 Similar to `llama-swap`, upstream endpoints can be accessed via the `/upstream/{model}/...` endpoints.
 Models with slashes in their name are accessible through `/upstream` by replacing the slashes with underscores.

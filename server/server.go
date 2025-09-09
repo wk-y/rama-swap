@@ -49,10 +49,16 @@ type backend struct {
 }
 
 func (s *Server) HandleHttp(mux *http.ServeMux) {
+	// OpenAI-compatible endpoints
 	mux.HandleFunc("/v1/models", s.handleModels)
 	mux.HandleFunc("POST /v1/chat/completions", s.handleChatCompletions)
 	mux.HandleFunc("POST /v1/completions", s.handleCompletions)
 
+	// Ollama-compatible endpoints
+	mux.HandleFunc("/api/version", s.ollamaVersion)
+	mux.HandleFunc("/api/tags", s.ollamaTags)
+
+	// llama-swap style endpoint
 	mux.HandleFunc("/upstream/{model}/{rest...}", s.serveUpstream)
 }
 
