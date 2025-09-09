@@ -69,7 +69,7 @@ func (s *Server) proxyEndpoint(w http.ResponseWriter, r *http.Request, modelFind
 	model, err := modelFinder(tee)
 
 	if err != nil {
-		log.Println("Failed to determine model for request: %v", err)
+		log.Println("Failed to determine model for request:", err)
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte("missing or invalid 'model' key"))
 		return
@@ -77,7 +77,7 @@ func (s *Server) proxyEndpoint(w http.ResponseWriter, r *http.Request, modelFind
 
 	backend, err := s.StartModel(model)
 	if err != nil {
-		log.Println("Failed to start model %s: %v", err)
+		log.Printf("Failed to start model %s: %v\n", model, err)
 		return
 	}
 	<-backend.ready
@@ -159,7 +159,7 @@ func (s *Server) handleModels(w http.ResponseWriter, r *http.Request) {
 	err = json.NewEncoder(w).Encode(models)
 
 	if err != nil {
-		log.Printf("Failed to reply: %v\n", models)
+		log.Printf("Failed to reply: %v\n", err)
 	}
 }
 
