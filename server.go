@@ -201,6 +201,7 @@ func (s *Server) StartModel(name string) (*backend, error) {
 		Model: name,
 		Port:  back.port,
 	})
+	cmd.Stderr = os.Stderr
 
 	err := cmd.Start()
 	if err != nil {
