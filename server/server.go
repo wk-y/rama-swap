@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"os"
+	"runtime"
 	"sync"
 	"time"
 
@@ -226,9 +227,13 @@ func (s *Server) StartModel(name string) (*backend, error) {
 		return back, nil
 	}
 
+	// stop all other backends
+	for k, backend := range s.backends {
+		backend.cancel()
+		delete(s.backends, k)
+	}
+
 	back = &backend{}
-	back.exited = false
-	back.err = nil
 	back.port = s.portManager.ReservePort()
 
 	ctx, cancel := context.WithCancel(context.Background())
