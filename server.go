@@ -1,15 +1,18 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"net/http/httputil"
 	"sync"
 	"time"
 
+	"github.com/wk-y/rama-swap/internal/util"
 	"github.com/wk-y/rama-swap/ramalama"
 )
 
@@ -60,7 +63,44 @@ func (s *Server) HandleHttp(mux *http.ServeMux) {
 		}
 	})
 
+	mux.HandleFunc("POST /v1/chat/completions", s.handleChatCompletions)
+
 	mux.HandleFunc("/upstream/{model}/{rest...}", s.serveUpstream)
+}
+
+func (s *Server) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
+	var decoderRead bytes.Buffer
+	tee := io.TeeReader(r.Body, &decoderRead)
+
+	var modelGet struct {
+		Model *string
+	}
+
+	json.NewDecoder(tee).Decode(&modelGet)
+
+	if modelGet.Model == nil {
+		log.Println("Completion requested with no model name")
+	}
+
+	name := *modelGet.Model
+
+	backend, err := s.StartModel(name)
+	if modelGet.Model == nil {
+		log.Println("Failed to start model %s: %v", err)
+	}
+
+	proxy := httputil.ReverseProxy{
+		Rewrite: func(pr *httputil.ProxyRequest) {
+			*pr.Out.URL = *pr.In.URL
+			pr.Out.URL.Host = fmt.Sprintf("127.0.0.1:%v", backend.port)
+			pr.Out.URL.Scheme = "http"
+			pr.Out.Body = util.ReadCloserWrapper{
+				Reader: io.MultiReader(&decoderRead, r.Body),
+				Closer: r.Body.Close,
+			}
+		},
+	}
+	proxy.ServeHTTP(w, r)
 }
 
 func (s *Server) serveUpstream(w http.ResponseWriter, r *http.Request) {
