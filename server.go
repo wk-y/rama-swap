@@ -48,22 +48,7 @@ type backend struct {
 }
 
 func (s *Server) HandleHttp(mux *http.ServeMux) {
-	mux.HandleFunc("/v1/models", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Add("Content-Type", "application/json; charset=utf-8")
-		ramaModels, err := s.ramalama.GetModels()
-		if err != nil {
-			log.Printf("Failed to get models: %v\n", ramaModels)
-		}
-		models, err := convertModelList(ramaModels)
-		if err != nil {
-			log.Printf("Failed to convert models: %v\n", models)
-		}
-		err = json.NewEncoder(w).Encode(models)
-		if err != nil {
-			log.Printf("Failed to reply: %v\n", models)
-		}
-	})
-
+	mux.HandleFunc("/v1/models", s.handleModels)
 	mux.HandleFunc("POST /v1/chat/completions", s.handleChatCompletions)
 	mux.HandleFunc("POST /v1/completions", s.handleCompletions)
 
@@ -140,6 +125,22 @@ func (s *Server) handleCompletions(w http.ResponseWriter, r *http.Request) {
 
 		return *modelGet.Model, nil
 	})
+}
+
+func (s *Server) handleModels(w http.ResponseWriter, r *http.Request) {
+	w.Header().Add("Content-Type", "application/json; charset=utf-8")
+	ramaModels, err := s.ramalama.GetModels()
+	if err != nil {
+		log.Printf("Failed to get models: %v\n", ramaModels)
+	}
+	models, err := convertModelList(ramaModels)
+	if err != nil {
+		log.Printf("Failed to convert models: %v\n", models)
+	}
+	err = json.NewEncoder(w).Encode(models)
+	if err != nil {
+		log.Printf("Failed to reply: %v\n", models)
+	}
 }
 
 func (s *Server) serveUpstream(w http.ResponseWriter, r *http.Request) {
