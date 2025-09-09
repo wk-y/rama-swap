@@ -14,6 +14,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/openai/openai-go/v2"
+	"github.com/openai/openai-go/v2/option"
 	"github.com/wk-y/rama-swap/internal/util"
 	"github.com/wk-y/rama-swap/ramalama"
 )
@@ -57,9 +59,15 @@ func (s *Server) HandleHttp(mux *http.ServeMux) {
 	// Ollama-compatible endpoints
 	mux.HandleFunc("/api/version", s.ollamaVersion)
 	mux.HandleFunc("/api/tags", s.ollamaTags)
+	mux.HandleFunc("/api/chat", s.ollamaChat)
 
 	// llama-swap style endpoint
 	mux.HandleFunc("/upstream/{model}/{rest...}", s.serveUpstream)
+
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		log.Println("Unhandled endpoint ", r.URL)
+		w.WriteHeader(http.StatusNotFound)
+	})
 }
 
 func (s *Server) proxyEndpoint(w http.ResponseWriter, r *http.Request, modelFinder func(body io.Reader) (model string, err error)) {
@@ -310,4 +318,15 @@ func (b *backend) healthCheck() bool {
 	}
 	resp.Body.Close()
 	return resp.StatusCode == http.StatusOK
+}
+
+// Creates a new OpenAI client configured to use the backend as an endpoint.
+func (b *backend) newClient() openai.Client {
+	return openai.NewClient(
+		option.WithAPIKey(""),
+		option.WithOrganization(""),
+		option.WithProject(""),
+		option.WithWebhookSecret(""),
+		option.WithBaseURL(fmt.Sprintf("http://127.0.0.1:%v", b.port)),
+	)
 }
