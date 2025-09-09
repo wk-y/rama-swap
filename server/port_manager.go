@@ -24,6 +24,7 @@ func (p *portManager) ReservePort() int {
 			p.reservedPorts[port] = struct{}{}
 			return port
 		}
+		port++
 	}
 }
 
