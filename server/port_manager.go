@@ -16,6 +16,7 @@ func newPortManager(startingPort int) *portManager {
 }
 
 func (p *portManager) ReservePort() int {
+	// todo: verify ports aren't already used
 	p.reservedPortsLock.Lock()
 	defer p.reservedPortsLock.Unlock()
 	port := p.StartingPort
