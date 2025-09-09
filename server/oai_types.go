@@ -1,4 +1,4 @@
-package main
+package server
 
 type Model struct {
 	Id      string `json:"id"`

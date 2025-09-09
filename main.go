@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/wk-y/rama-swap/ramalama"
+	"github.com/wk-y/rama-swap/server"
 )
 
 func main() {
@@ -25,7 +26,7 @@ func main() {
 		}
 	}
 
-	server := NewServer(ramalama.Ramalama{
+	server := server.NewServer(ramalama.Ramalama{
 		Command: ramalamaCommand,
 	})
 
