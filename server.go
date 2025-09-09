@@ -128,16 +128,29 @@ func (s *Server) handleCompletions(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleModels(w http.ResponseWriter, r *http.Request) {
-	w.Header().Add("Content-Type", "application/json; charset=utf-8")
+	internalServerError := func(reason string) {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte("Internal Server Error: "))
+		w.Write([]byte(reason))
+	}
+
 	ramaModels, err := s.ramalama.GetModels()
 	if err != nil {
 		log.Printf("Failed to get models: %v\n", ramaModels)
+		internalServerError("E_MODEL_GET")
+		return
 	}
+
 	models, err := convertModelList(ramaModels)
 	if err != nil {
 		log.Printf("Failed to convert models: %v\n", models)
+		internalServerError("E_MODEL_LIST_CONVERT")
+		return
 	}
+
+	w.Header().Add("Content-Type", "application/json; charset=utf-8")
 	err = json.NewEncoder(w).Encode(models)
+
 	if err != nil {
 		log.Printf("Failed to reply: %v\n", models)
 	}
