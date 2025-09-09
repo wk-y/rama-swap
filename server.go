@@ -226,7 +226,7 @@ func (s *Server) StartModel(name string) (*backend, error) {
 				break
 			}
 
-			time.Sleep(1000) // fixme
+			time.Sleep(time.Second) // fixme
 		}
 	}()
 
