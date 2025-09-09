@@ -244,6 +244,17 @@ func (s *Server) StartModel(name string) (*backend, error) {
 		return nil, fmt.Errorf("failed to start ramalama: %v\n", err)
 	}
 
+	switch runtime.GOOS {
+	case "linux":
+		// By default, Go sends SIGKILL, which causes ramalama to exit without stopping the container.
+		// Instead, let ramalama gracefully exit by sending SIGINT
+		cmd.Cancel = func() error {
+			return cmd.Process.Signal(os.Interrupt)
+		}
+	default:
+		log.Println("[WARN] Graceful shutdown of ramalama not supported for OS, switching may not work correctly")
+	}
+
 	back.cancel = cancel
 	back.ready = make(chan struct{})
 
@@ -267,6 +278,7 @@ func (s *Server) StartModel(name string) (*backend, error) {
 	// waits for exit
 	go func() {
 		err := cmd.Wait()
+		back.cancel()
 
 		back.Lock()
 		back.err = err
