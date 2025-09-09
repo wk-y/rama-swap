@@ -9,6 +9,7 @@ import (
 	"log"
 	"net/http"
 	"net/http/httputil"
+	"os"
 	"sync"
 	"time"
 
@@ -68,25 +69,23 @@ func (s *Server) HandleHttp(mux *http.ServeMux) {
 	mux.HandleFunc("/upstream/{model}/{rest...}", s.serveUpstream)
 }
 
-func (s *Server) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
+func (s *Server) proxyEndpoint(w http.ResponseWriter, r *http.Request, modelFinder func(body io.Reader) (model string, err error)) {
 	var decoderRead bytes.Buffer
 	tee := io.TeeReader(r.Body, &decoderRead)
 
-	var modelGet struct {
-		Model *string
+	model, err := modelFinder(tee)
+
+	if err != nil {
+		log.Println("Failed to determine model for request: %v", err)
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte("missing or invalid 'model' key"))
+		return
 	}
 
-	json.NewDecoder(tee).Decode(&modelGet)
-
-	if modelGet.Model == nil {
-		log.Println("Completion requested with no model name")
-	}
-
-	name := *modelGet.Model
-
-	backend, err := s.StartModel(name)
-	if modelGet.Model == nil {
+	backend, err := s.StartModel(model)
+	if err != nil {
 		log.Println("Failed to start model %s: %v", err)
+		return
 	}
 
 	proxy := httputil.ReverseProxy{
@@ -95,12 +94,31 @@ func (s *Server) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 			pr.Out.URL.Host = fmt.Sprintf("127.0.0.1:%v", backend.port)
 			pr.Out.URL.Scheme = "http"
 			pr.Out.Body = util.ReadCloserWrapper{
-				Reader: io.MultiReader(&decoderRead, r.Body),
-				Closer: r.Body.Close,
+				Reader: io.MultiReader(&decoderRead, pr.In.Body),
+				Closer: pr.In.Body.Close,
 			}
 		},
 	}
 	proxy.ServeHTTP(w, r)
+}
+
+func (s *Server) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
+	s.proxyEndpoint(w, r, func(body io.Reader) (model string, err error) {
+		var modelGet struct {
+			Model *string
+		}
+
+		err = json.NewDecoder(body).Decode(&modelGet)
+		if err != nil {
+			return
+		}
+
+		if modelGet.Model == nil {
+			return "", fmt.Errorf("missing model key")
+		}
+
+		return *modelGet.Model, nil
+	})
 }
 
 func (s *Server) serveUpstream(w http.ResponseWriter, r *http.Request) {
