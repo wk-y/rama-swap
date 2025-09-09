@@ -130,6 +130,11 @@ func (s *Server) ollamaChat(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	if err := stream.Err(); err != nil {
+		log.Println("Error during response stream:", err)
+		// keep going to send final response
+	}
+
 	responseEncoder.Encode(ollamatypes.ChatFinalResponse{
 		ChatResponse: ollamatypes.ChatResponse{
 			Model:     model,
