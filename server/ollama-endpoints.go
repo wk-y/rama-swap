@@ -90,16 +90,32 @@ func (s *Server) ollamaChat(w http.ResponseWriter, r *http.Request) {
 	client := backendModel.newClient()
 	params := ollamaTranslateParams(requestJson)
 
+	completionStartTime := time.Now().UTC()
 	stream := client.Chat.Completions.NewStreaming(r.Context(), params)
 	defer stream.Close()
 
 	responseEncoder := json.NewEncoder(w)
 	responseController := http.NewResponseController(w)
+
+	// only written to in non-streaming mode to send all tokens in the final response
 	var accumulator strings.Builder
+
+	// time the first token was generated
+	var firstCreatedAt *time.Time
+
+	// number of tokens generated
+	var evalCount int64
 
 	for stream.Next() {
 		event := stream.Current()
 		if len(event.Choices) > 0 {
+			evalCount++
+
+			if firstCreatedAt == nil {
+				time := time.Unix(event.Created, 0)
+				firstCreatedAt = &time
+			}
+
 			if requestJson.Stream == false {
 				accumulator.WriteString(event.Choices[0].Delta.Content)
 				continue
@@ -131,6 +147,12 @@ func (s *Server) ollamaChat(w http.ResponseWriter, r *http.Request) {
 		// keep going to send final response
 	}
 
+	completionFinishTime := time.Now().UTC()
+
+	if firstCreatedAt == nil {
+		firstCreatedAt = &completionFinishTime
+	}
+
 	responseEncoder.Encode(ollamatypes.ChatFinalResponse{
 		ChatResponse: ollamatypes.ChatResponse{
 			Model:     model,
@@ -140,8 +162,10 @@ func (s *Server) ollamaChat(w http.ResponseWriter, r *http.Request) {
 				Content: accumulator.String(),
 			},
 			Done: true,
-			// todo: fill out all the other fields
 		},
+		TotalDuration: completionFinishTime.Sub(completionStartTime).Nanoseconds(),
+		EvalDuration:  completionFinishTime.Sub(*firstCreatedAt).Nanoseconds(),
+		EvalCount:     evalCount,
 	})
 }
 
