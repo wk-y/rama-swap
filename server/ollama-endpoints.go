@@ -88,22 +88,9 @@ func (s *Server) ollamaChat(w http.ResponseWriter, r *http.Request) {
 	<-backendModel.ready
 
 	client := backendModel.newClient()
-	messages := make([]openai.ChatCompletionMessageParamUnion, len(requestJson.Messages))
-	for i, message := range requestJson.Messages {
-		switch message.Role {
-		case "user":
-			messages[i] = openai.UserMessage(message.Content)
-		case "system":
-			messages[i] = openai.SystemMessage(message.Content)
-		default: // fallback to assistant message type
-			messages[i] = openai.AssistantMessage(message.Content)
-		}
-	}
+	params := ollamaTranslateParams(requestJson)
 
-	stream := client.Chat.Completions.NewStreaming(r.Context(), openai.ChatCompletionNewParams{
-		Messages: messages,
-		Model:    model,
-	})
+	stream := client.Chat.Completions.NewStreaming(r.Context(), params)
 	defer stream.Close()
 
 	responseEncoder := json.NewEncoder(w)
@@ -156,4 +143,46 @@ func (s *Server) ollamaChat(w http.ResponseWriter, r *http.Request) {
 			// todo: fill out all the other fields
 		},
 	})
+}
+
+func ollamaTranslateParams(request ollamatypes.ChatRequest) (completion openai.ChatCompletionNewParams) {
+	completion.Model = *request.Model
+
+	completion.Messages = make([]openai.ChatCompletionMessageParamUnion, len(request.Messages))
+	for i, message := range request.Messages {
+		switch message.Role {
+		case "user":
+			completion.Messages[i] = openai.UserMessage(message.Content)
+		case "system":
+			completion.Messages[i] = openai.SystemMessage(message.Content)
+		default: // fallback to assistant message type
+			completion.Messages[i] = openai.AssistantMessage(message.Content)
+		}
+	}
+
+	if request.Options != nil {
+		ollamaAddOptions(&completion, *request.Options)
+	}
+
+	return
+}
+
+// ollamaAddOptions sets completion's options to ollama options, where possible.
+// Options that are not set will not be changed.
+func ollamaAddOptions(completion *openai.ChatCompletionNewParams, options ollamatypes.Options) {
+	if options.Temperature != nil {
+		completion.Temperature = openai.Opt(*options.Temperature)
+	}
+
+	if options.Seed != nil {
+		completion.Seed = openai.Opt(*options.Seed)
+	}
+
+	if options.NumPredict != nil {
+		completion.MaxCompletionTokens = openai.Opt(*options.NumPredict)
+	}
+
+	if options.TopP != nil {
+		completion.TopP = openai.Opt(*options.TopP)
+	}
 }
