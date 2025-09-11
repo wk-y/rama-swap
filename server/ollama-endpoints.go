@@ -95,7 +95,7 @@ func (s *Server) ollamaChat(w http.ResponseWriter, r *http.Request) {
 
 	backendModel, err := s.StartModel(model)
 	if err != nil {
-		log.Printf("Failed to start model %s: %v\n", backendModel, err)
+		log.Printf("Failed to start model %s: %v\n", model, err)
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte("E_MODEL_START"))
 	}
