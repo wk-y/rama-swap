@@ -25,15 +25,30 @@ func (s *Server) ollamaTags(w http.ResponseWriter, r *http.Request) {
 		Models []ollamatypes.Model `json:"models"`
 	}
 	for _, ramaModel := range ramaModels {
-		models.Models = append(models.Models, ollamatypes.Model{
+		model := ollamatypes.Model{
 			Name:       ramaModel.Name,
 			Model:      ramaModel.Name,
 			ModifiedAt: ramaModel.Modified,
 			Size:       ramaModel.Size,
-			Details: ollamatypes.ModelDetails{ // todo: fetch real data from ramalama inspect
-				Format: "gguf",
-			},
-		})
+		}
+
+		info, err := s.ramalama.Inspect(ramaModel.Name)
+		if err != nil {
+			log.Printf("Failed to inspect full details of model %s: %v\n", ramaModel.Name, err)
+		} else {
+			model.Name = info.Name
+			model.Details.Format = strings.ToLower(info.Format)
+			if info.Metadata.GeneralArchitecture != nil {
+				model.Details.Family = *info.Metadata.GeneralArchitecture
+				model.Details.Families = []string{*info.Metadata.GeneralArchitecture}
+			}
+
+			if info.Metadata.GeneralSizeLabel != nil {
+				model.Details.ParameterSize = *info.Metadata.GeneralSizeLabel
+			}
+		}
+
+		models.Models = append(models.Models, model)
 	}
 
 	w.Header().Add("Content-Type", "application/json; charset=utf-8")
