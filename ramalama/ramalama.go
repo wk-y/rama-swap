@@ -11,6 +11,15 @@ type Ramalama struct {
 	Command []string
 }
 
+// checkValidity checks that the Ramalama configuration is valid.
+// A valid config must have a non-empty Command slice.
+func (r Ramalama) checkValidity() error {
+	if len(r.Command) == 0 {
+		return ErrEmptyCommand{}
+	}
+	return nil
+}
+
 type Model struct {
 	Name     string
 	Modified string
@@ -18,8 +27,8 @@ type Model struct {
 }
 
 func (c Ramalama) GetModels() ([]Model, error) {
-	if len(c.Command) == 0 {
-		return nil, fmt.Errorf("invalid config: Ramalama Command should not be empty")
+	if err := c.checkValidity(); err != nil {
+		return nil, err
 	}
 
 	cliArgs := slices.Concat(c.Command[1:], []string{"list", "--json"})
