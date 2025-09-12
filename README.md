@@ -18,13 +18,8 @@ go run github.com/wk-y/rama-swap@latest
 In this mode, all model servers will run in the same container as well.
 
 ```bash
-# build the container
-git clone http://github.com/wk-y/rama-swap
-cd rama-swap
-podman build . -t rama-swap
-
 # run the container (you will need to add flags to enable gpu inference)
-podman run --rm -v ~/.local/share/ramalama:/app/store:ro,Z -p 127.0.0.1:4917:4917 rama-swap
+podman run --rm -v ~/.local/share/ramalama:/app/store:ro,Z -p 127.0.0.1:4917:4917 ghcr.io/wk-y/rama-swap:master
 ```
 
 ## Configuration
