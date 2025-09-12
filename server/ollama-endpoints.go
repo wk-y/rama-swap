@@ -1,7 +1,13 @@
 package server
 
 import (
+	"encoding/base64"
 	"encoding/json"
+	"fmt"
+	"image"
+	_ "image/gif"
+	_ "image/jpeg"
+	_ "image/png"
 	"log"
 	"net/http"
 	"strings"
@@ -103,7 +109,12 @@ func (s *Server) ollamaChat(w http.ResponseWriter, r *http.Request) {
 
 	<-backendModel.ready
 
-	params := ollamaTranslateParams(requestJson)
+	params, err := ollamaTranslateParams(requestJson)
+	if err != nil {
+		log.Printf("Failed to translate request: %v\n", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte("E_COMPLETION_TRANSLATE"))
+	}
 
 	var stream *ssestream.Stream[openai.ChatCompletionChunk]
 	err = backendModel.WithClient(func(client openai.Client) error {
@@ -196,14 +207,38 @@ func (s *Server) ollamaChat(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func ollamaTranslateParams(request ollamatypes.ChatRequest) (completion openai.ChatCompletionNewParams) {
+// ollamaTranslateParams translates an ollama request into an openai chat completion request.
+// Images attached to non-user messages are not supported and will be silently ignored.
+func ollamaTranslateParams(request ollamatypes.ChatRequest) (completion openai.ChatCompletionNewParams, err error) {
 	completion.Model = *request.Model
 
 	completion.Messages = make([]openai.ChatCompletionMessageParamUnion, len(request.Messages))
 	for i, message := range request.Messages {
 		switch message.Role {
 		case "user":
-			completion.Messages[i] = openai.UserMessage(message.Content)
+			if len(message.Images) == 0 {
+				completion.Messages[i] = openai.UserMessage(message.Content)
+				break
+			}
+
+			var content []openai.ChatCompletionContentPartUnionParam
+
+			for _, img := range message.Images {
+				uri, err := base64ToImageUri(img)
+				if err != nil {
+					return completion, err
+				}
+
+				content = append(content,
+					openai.ImageContentPart(openai.ChatCompletionContentPartImageImageURLParam{
+						URL: uri,
+					}),
+				)
+			}
+
+			content = append(content, openai.TextContentPart(message.Content))
+			completion.Messages[i] = openai.UserMessage(content)
+
 		case "system":
 			completion.Messages[i] = openai.SystemMessage(message.Content)
 		default: // fallback to assistant message type
@@ -216,6 +251,24 @@ func ollamaTranslateParams(request ollamatypes.ChatRequest) (completion openai.C
 	}
 
 	return
+}
+
+func base64ToImageUri(img string) (string, error) {
+	_, format, err := image.DecodeConfig(base64.NewDecoder(base64.StdEncoding, strings.NewReader(img)))
+	if err != nil {
+		return "", fmt.Errorf("failed to determine image type: %v", err)
+	}
+
+	switch format {
+	case "png":
+		return "data:image/png;base64," + img, nil
+	case "jpeg":
+		return "data:image/jpeg;base64," + img, nil
+	case "gif":
+		return "data:image/gif;base64," + img, nil
+	default:
+		return "", fmt.Errorf("decodable but unsupported image format %s", format)
+	}
 }
 
 // ollamaAddOptions sets completion's options to ollama options, where possible.

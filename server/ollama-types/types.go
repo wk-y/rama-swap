@@ -19,7 +19,7 @@ type ModelDetails struct {
 }
 
 type Message struct {
-	Role    string `json:"role"`
-	Content string `json:"content"`
-	Images  *any   `json:"images"` // todo: fix type
+	Role    string   `json:"role"`
+	Content string   `json:"content"`
+	Images  []string `json:"images"` // todo: fix type
 }
