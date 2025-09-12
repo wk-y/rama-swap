@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/openai/openai-go/v2"
+	"github.com/openai/openai-go/v2/packages/ssestream"
 	ollamatypes "github.com/wk-y/rama-swap/server/ollama-types"
 )
 
@@ -102,11 +103,22 @@ func (s *Server) ollamaChat(w http.ResponseWriter, r *http.Request) {
 
 	<-backendModel.ready
 
-	client := backendModel.newClient()
 	params := ollamaTranslateParams(requestJson)
 
+	var stream *ssestream.Stream[openai.ChatCompletionChunk]
+	err = backendModel.WithClient(func(client openai.Client) error {
+		stream = client.Chat.Completions.NewStreaming(r.Context(), params)
+		return nil
+	})
+	if err != nil {
+		log.Println("Error connecting to backend:", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte("E_BACKEND_CONNECT\n"))
+		return
+	}
+
 	completionStartTime := time.Now().UTC()
-	stream := client.Chat.Completions.NewStreaming(r.Context(), params)
+
 	defer stream.Close()
 
 	responseEncoder := json.NewEncoder(w)

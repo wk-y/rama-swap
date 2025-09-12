@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -45,9 +46,12 @@ type backend struct {
 	sync.RWMutex
 	ready  chan struct{}
 	exited bool
-	port   int
-	err    error
-	cancel func()
+	// The port the backend is currently running on.
+	// A value of zero indicates no port is currently assigned.
+	port     int
+	portLock sync.RWMutex
+	err      error
+	cancel   func()
 }
 
 func (s *Server) HandleHttp(mux *http.ServeMux) {
@@ -302,7 +306,12 @@ func (s *Server) StartModel(name string) (*backend, error) {
 		back.Lock()
 		back.err = err
 		back.exited = true
+
+		back.portLock.Lock()
 		s.portManager.ReleasePort(back.port)
+		back.port = 0
+		back.portLock.Unlock()
+
 		back.Unlock()
 	}()
 
@@ -320,13 +329,24 @@ func (b *backend) healthCheck() bool {
 	return resp.StatusCode == http.StatusOK
 }
 
-// Creates a new OpenAI client configured to use the backend as an endpoint.
-func (b *backend) newClient() openai.Client {
-	return openai.NewClient(
+// WithClient runs callback with a client configured to use the backend.
+// Because the backend's port may be freed and reused by another backend,
+// it is not safe to save the client given to callback.
+func (b *backend) WithClient(callback func(openai.Client) error) error {
+	b.portLock.RLock()
+	defer b.portLock.RUnlock()
+
+	if b.port == 0 { // port was freed
+		return errors.New("backend is dead")
+	}
+
+	client := openai.NewClient(
 		option.WithAPIKey(""),
 		option.WithOrganization(""),
 		option.WithProject(""),
 		option.WithWebhookSecret(""),
 		option.WithBaseURL(fmt.Sprintf("http://127.0.0.1:%v", b.port)),
 	)
+
+	return callback(client)
 }
