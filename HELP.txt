@@ -1,0 +1,5 @@
+  -h, -help, --help          display this help and exit
+  -ramalama COMMAND [ARG]... \;
+                             specify the ramalama command to use
+  -port                      specify the port number to bind to
+  -host                      specify the host to bind to
