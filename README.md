@@ -42,5 +42,6 @@ Ollama-compatible endpoints are also implemented:
 
 $^1$ Some features are not yet supported.
 
-Similar to `llama-swap`, upstream endpoints can be accessed via the `/upstream/{model}/...` endpoints.
+Similar to `llama-swap`, the `/upstream/{model}/...` endpoints provide access to the upstream model servers.
 Models with slashes in their name are accessible through `/upstream` by replacing the slashes with underscores.
+`/upstream/` provides links to each models' url.
