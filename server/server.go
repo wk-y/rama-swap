@@ -2,7 +2,6 @@ package server
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -10,10 +9,7 @@ import (
 	"log"
 	"net/http"
 	"net/http/httputil"
-	"os"
-	"runtime"
 	"sync"
-	"time"
 
 	"github.com/openai/openai-go/v2"
 	"github.com/openai/openai-go/v2/option"
@@ -25,27 +21,25 @@ type Server struct {
 	ModelNameMangler func(string) string
 	BasePort         int // starting port number to use for underlying instances
 
-	ramalama          ramalama.Ramalama
-	backendsLock      sync.RWMutex
-	backends          map[string]*backend
+	ramalama  ramalama.Ramalama
+	scheduler ModelScheduler
+
 	demangleCacheLock sync.RWMutex
 	demangleCache     map[string]string
-	portManager       portManager
 }
 
 func NewServer(r ramalama.Ramalama) *Server {
 	return &Server{
 		ramalama:      r,
-		backends:      map[string]*backend{},
+		scheduler:     NewFcfsScheduler(r, 49170),
 		demangleCache: map[string]string{},
-		portManager:   *newPortManager(49170),
 	}
 }
 
 type backend struct {
 	sync.RWMutex
 	ready  chan struct{}
-	exited bool
+	exited chan struct{}
 	// The port the backend is currently running on.
 	// A value of zero indicates no port is currently assigned.
 	port     int
@@ -87,12 +81,12 @@ func (s *Server) proxyEndpoint(w http.ResponseWriter, r *http.Request, modelFind
 		return
 	}
 
-	backend, err := s.StartModel(model)
+	backend, err := s.scheduler.Lock(r.Context(), model)
 	if err != nil {
 		log.Printf("Failed to start model %s: %v\n", model, err)
 		return
 	}
-	<-backend.ready
+	defer s.scheduler.Unlock(backend)
 
 	proxy := httputil.ReverseProxy{
 		Rewrite: func(pr *httputil.ProxyRequest) {
@@ -183,13 +177,14 @@ func (s *Server) serveUpstream(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("invalid model name"))
 		return
 	}
-	backend, err := s.StartModel(name)
 
+	backend, err := s.scheduler.Lock(r.Context(), name)
 	if err != nil {
 		log.Println(err)
 		w.Write([]byte(fmt.Sprint(err)))
 		return
 	}
+	defer s.scheduler.Unlock(backend)
 
 	<-backend.ready
 	proxy := httputil.ReverseProxy{
@@ -234,89 +229,6 @@ func (s *Server) demangle(name string) (string, error) {
 	}
 
 	return "", fmt.Errorf("model not found")
-}
-
-func (s *Server) StartModel(name string) (*backend, error) {
-	s.backendsLock.Lock()
-	defer s.backendsLock.Unlock()
-
-	back, ok := s.backends[name]
-	if ok && !back.exited {
-		return back, nil
-	}
-
-	// stop all other backends
-	for k, backend := range s.backends {
-		backend.cancel()
-		delete(s.backends, k)
-	}
-
-	back = &backend{}
-	back.port = s.portManager.ReservePort()
-
-	ctx, cancel := context.WithCancel(context.Background())
-	cmd := s.ramalama.ServeCommand(ctx, ramalama.ServeArgs{
-		Model: name,
-		Port:  back.port,
-	})
-	cmd.Stderr = os.Stderr
-
-	err := cmd.Start()
-	if err != nil {
-		cancel()
-		return nil, fmt.Errorf("failed to start ramalama: %v\n", err)
-	}
-
-	switch runtime.GOOS {
-	case "linux":
-		// By default, Go sends SIGKILL, which causes ramalama to exit without stopping the container.
-		// Instead, let ramalama gracefully exit by sending SIGINT
-		cmd.Cancel = func() error {
-			return cmd.Process.Signal(os.Interrupt)
-		}
-	default:
-		log.Println("[WARN] Graceful shutdown of ramalama not supported for OS, switching may not work correctly")
-	}
-
-	back.cancel = cancel
-	back.ready = make(chan struct{})
-
-	// waits for ready
-	go func() {
-		defer close(back.ready)
-
-		for !back.healthCheck() {
-			back.Lock()
-			dead := back.exited
-			back.Unlock()
-
-			if dead {
-				break
-			}
-
-			time.Sleep(time.Second) // fixme
-		}
-	}()
-
-	// waits for exit
-	go func() {
-		err := cmd.Wait()
-		back.cancel()
-
-		back.Lock()
-		back.err = err
-		back.exited = true
-
-		back.portLock.Lock()
-		s.portManager.ReleasePort(back.port)
-		back.port = 0
-		back.portLock.Unlock()
-
-		back.Unlock()
-	}()
-
-	s.backends[name] = back
-	return back, nil
 }
 
 func (b *backend) healthCheck() bool {

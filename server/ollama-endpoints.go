@@ -100,14 +100,13 @@ func (s *Server) ollamaChat(w http.ResponseWriter, r *http.Request) {
 
 	model := *requestJson.Model
 
-	backendModel, err := s.StartModel(model)
+	backendModel, err := s.scheduler.Lock(r.Context(), model)
 	if err != nil {
 		log.Printf("Failed to start model %s: %v\n", model, err)
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte("E_MODEL_START"))
 	}
-
-	<-backendModel.ready
+	defer s.scheduler.Unlock(backendModel)
 
 	params, err := ollamaTranslateParams(requestJson)
 	if err != nil {
