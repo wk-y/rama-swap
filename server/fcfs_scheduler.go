@@ -26,7 +26,6 @@ type fcfsScheduler struct {
 
 	// cached set of valid model names
 	ramalamaModelsCache     map[string]struct{}
-	ramalamaCacheRefresh    time.Time
 	ramalamaModelsCacheLock sync.Mutex
 }
 
@@ -90,20 +89,22 @@ func (f *fcfsScheduler) modelExists(modelName string) (bool, error) {
 	f.ramalamaModelsCacheLock.Lock()
 	defer f.ramalamaModelsCacheLock.Unlock()
 
-	now := time.Now()
-	if f.ramalamaCacheRefresh.Before(now) {
-		models, err := f.ramalama.GetModels()
-		if err != nil {
-			return false, err
-		}
-
-		f.ramalamaModelsCache = make(map[string]struct{}, len(models))
-		for _, model := range models {
-			f.ramalamaModelsCache[model.Name] = struct{}{}
-		}
+	_, ok := f.ramalamaModelsCache[modelName]
+	if ok {
+		return true, nil
 	}
 
-	_, ok := f.ramalamaModelsCache[modelName]
+	models, err := f.ramalama.GetModels()
+	if err != nil {
+		return false, err
+	}
+
+	f.ramalamaModelsCache = make(map[string]struct{}, len(models))
+	for _, model := range models {
+		f.ramalamaModelsCache[model.Name] = struct{}{}
+	}
+
+	_, ok = f.ramalamaModelsCache[modelName]
 	return ok, nil
 }
 
@@ -177,8 +178,9 @@ func (f *fcfsScheduler) startBackend(modelName string) (*backend, error) {
 
 func NewFcfsScheduler(ramalama ramalama.Ramalama, port int) *fcfsScheduler {
 	return &fcfsScheduler{
-		ramalama: ramalama,
-		port:     port,
+		ramalama:            ramalama,
+		port:                port,
+		ramalamaModelsCache: map[string]struct{}{},
 	}
 }
 
