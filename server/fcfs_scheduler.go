@@ -60,6 +60,7 @@ func (f *fcfsScheduler) Lock(ctx context.Context, model string) (*backend, error
 	if f.backend != nil {
 		f.backend.cancel()
 		<-f.backend.exited
+		f.backend = nil
 	}
 
 	backend, err := f.startBackend(model)
@@ -67,6 +68,7 @@ func (f *fcfsScheduler) Lock(ctx context.Context, model string) (*backend, error
 		return nil, err
 	}
 	f.backend = backend
+	f.backendModel = model
 
 	select {
 	case <-ctx.Done():
