@@ -28,10 +28,10 @@ type Server struct {
 	demangleCache     map[string]string
 }
 
-func NewServer(r ramalama.Ramalama) *Server {
+func NewServer(r ramalama.Ramalama, scheduler ModelScheduler) *Server {
 	return &Server{
 		ramalama:      r,
-		scheduler:     NewFcfsScheduler(r, 49170),
+		scheduler:     scheduler,
 		demangleCache: map[string]string{},
 	}
 }

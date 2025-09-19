@@ -8,12 +8,14 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 )
 
 type args struct {
-	Ramalama []string
-	Port     *int
-	Host     *string
+	Ramalama    []string
+	Port        *int
+	Host        *string
+	IdleTimeout *time.Duration
 }
 
 // cli should include the name of the command itself
@@ -73,6 +75,23 @@ func parseArgs(cli []string) (a args, rest []string, err error) {
 			}
 
 			a.Host = &cli[1]
+
+			cli = cli[2:]
+
+		case "-idle-timeout":
+			if a.IdleTimeout != nil {
+				return args{}, nil, fmt.Errorf("%s may only be passed at most once", cli[0])
+			}
+
+			if len(cli) < 2 {
+				return args{}, nil, fmt.Errorf("expected duration after %s", cli[0])
+			}
+
+			timeout, err := time.ParseDuration(cli[1])
+			if err != nil {
+				return args{}, nil, fmt.Errorf("invalid duration %v: %w", cli[1], err)
+			}
+			a.IdleTimeout = &timeout
 
 			cli = cli[2:]
 

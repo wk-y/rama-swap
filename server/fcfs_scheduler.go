@@ -16,7 +16,9 @@ import (
 // fcfsScheduler is a ModelScheduler that implements (roughly) first-come-first-serve
 // access with at most one model loaded at a time.
 type fcfsScheduler struct {
-	port     int // port to attach the backend to
+	port        int // port to attach the backend to
+	idleTimeout time.Duration
+
 	lock     sync.Mutex
 	ramalama ramalama.Ramalama
 
@@ -27,6 +29,7 @@ type fcfsScheduler struct {
 	backend        *backend
 	backendModel   string
 	backendUsers   int
+	backendIdleAt  time.Time
 	backendLocking bool
 
 	// cached set of valid model names
@@ -58,9 +61,14 @@ func (f *fcfsScheduler) Lock(ctx context.Context, model string) (*backend, error
 	defer f.backendCond.L.Unlock()
 
 	if f.backend != nil && f.backendModel == model {
-		f.backendUsers++
-		f.backendCond.Broadcast()
-		return f.backend, nil
+		// if it is exited, don't return the backend
+		select {
+		case <-f.backend.exited:
+		default:
+			f.backendUsers++
+			f.backendCond.Broadcast()
+			return f.backend, nil
+		}
 	}
 
 	for f.backendUsers > 0 {
@@ -95,6 +103,9 @@ func (f *fcfsScheduler) Unlock(backend *backend) {
 	defer f.backendCond.L.Unlock()
 	if f.backend == backend {
 		f.backendUsers--
+		if f.backendUsers == 0 {
+			f.backendIdleAt = time.Now()
+		}
 		f.backendCond.Broadcast()
 	}
 }
@@ -190,13 +201,45 @@ func (f *fcfsScheduler) startBackend(modelName string) (*backend, error) {
 	return back, nil
 }
 
-func NewFcfsScheduler(ramalama ramalama.Ramalama, port int) *fcfsScheduler {
-	return &fcfsScheduler{
+func (f *fcfsScheduler) startIdleTimeout() {
+	f.backendCond.L.Lock()
+	for {
+		if f.backend == nil || f.backendUsers > 0 {
+			f.backendCond.Wait()
+			continue
+		}
+
+		if waitingTime := time.Until(f.backendIdleAt.Add(f.idleTimeout)); waitingTime > 0 {
+			go func() {
+				time.Sleep(waitingTime)
+				f.backendCond.L.Lock()
+				defer f.backendCond.L.Unlock()
+				f.backendCond.Broadcast()
+			}()
+			f.backendCond.Wait()
+			continue
+		}
+
+		log.Printf("Stopping backend after being idle for %v\n", f.idleTimeout)
+		f.backend.cancel()
+		<-f.backend.exited
+		f.backend = nil
+	}
+}
+
+func NewFcfsScheduler(ramalama ramalama.Ramalama, port int, idleTimeout time.Duration) *fcfsScheduler {
+	scheduler := &fcfsScheduler{
 		ramalama:            ramalama,
 		port:                port,
+		idleTimeout:         idleTimeout,
 		ramalamaModelsCache: map[string]struct{}{},
 		backendCond:         *sync.NewCond(&sync.Mutex{}),
 	}
+
+	if idleTimeout != 0 {
+		go scheduler.startIdleTimeout()
+	}
+	return scheduler
 }
 
 var _ ModelScheduler = (*fcfsScheduler)(nil)

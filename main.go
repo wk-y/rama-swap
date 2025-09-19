@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/wk-y/rama-swap/ramalama"
 	"github.com/wk-y/rama-swap/server"
@@ -40,6 +41,11 @@ func main() {
 		args.Port = &port
 	}
 
+	if args.IdleTimeout == nil {
+		timeout := time.Duration(0)
+		args.IdleTimeout = &timeout
+	}
+
 	if args.Ramalama == nil {
 		if env := os.Getenv("RAMALAMA_COMMAND"); env != "" {
 			args.Ramalama = strings.Split(env, " ")
@@ -57,9 +63,11 @@ func main() {
 	}
 	defer l.Close()
 
-	server := server.NewServer(ramalama.Ramalama{
+	ramalama := ramalama.Ramalama{
 		Command: args.Ramalama,
-	})
+	}
+	scheduler := server.NewFcfsScheduler(ramalama, 49170, *args.IdleTimeout)
+	server := server.NewServer(ramalama, scheduler)
 
 	server.ModelNameMangler = func(s string) string {
 		return strings.ReplaceAll(s, "/", "_")
