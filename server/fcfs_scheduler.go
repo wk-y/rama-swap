@@ -16,13 +16,18 @@ import (
 // fcfsScheduler is a ModelScheduler that implements (roughly) first-come-first-serve
 // access with at most one model loaded at a time.
 type fcfsScheduler struct {
-	port         int // port to attach the backend to
-	lock         sync.Mutex
-	ramalama     ramalama.Ramalama
-	backend      *backend
-	backendModel string
-	idle         sync.Cond
-	backendUsers sync.WaitGroup
+	port     int // port to attach the backend to
+	lock     sync.Mutex
+	ramalama ramalama.Ramalama
+
+	// rules for using the backend properties:
+	// backendCond must be held while changing any of the backend properties
+	// backend may only be changed when backendUsers is 0
+	backendCond    sync.Cond
+	backend        *backend
+	backendModel   string
+	backendUsers   int
+	backendLocking bool
 
 	// cached set of valid model names
 	ramalamaModelsCache     map[string]struct{}
@@ -49,12 +54,18 @@ func (f *fcfsScheduler) Lock(ctx context.Context, model string) (*backend, error
 	default:
 	}
 
+	f.backendCond.L.Lock()
+	defer f.backendCond.L.Unlock()
+
 	if f.backend != nil && f.backendModel == model {
-		f.backendUsers.Add(1)
+		f.backendUsers++
+		f.backendCond.Broadcast()
 		return f.backend, nil
 	}
 
-	f.backendUsers.Wait()
+	for f.backendUsers > 0 {
+		f.backendCond.Wait()
+	}
 
 	if f.backend != nil {
 		f.backend.cancel()
@@ -73,15 +84,18 @@ func (f *fcfsScheduler) Lock(ctx context.Context, model string) (*backend, error
 	case <-ctx.Done():
 		return nil, errors.New("context cancelled")
 	case <-backend.ready:
-		f.backendUsers.Add(1)
+		f.backendUsers++
 		return f.backend, nil
 	}
 }
 
 // Unlock implements ModelScheduler.
 func (f *fcfsScheduler) Unlock(backend *backend) {
+	f.backendCond.L.Lock()
+	defer f.backendCond.L.Unlock()
 	if f.backend == backend {
-		f.backendUsers.Done()
+		f.backendUsers--
+		f.backendCond.Broadcast()
 	}
 }
 
@@ -181,6 +195,7 @@ func NewFcfsScheduler(ramalama ramalama.Ramalama, port int) *fcfsScheduler {
 		ramalama:            ramalama,
 		port:                port,
 		ramalamaModelsCache: map[string]struct{}{},
+		backendCond:         *sync.NewCond(&sync.Mutex{}),
 	}
 }
 
