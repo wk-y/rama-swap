@@ -9,6 +9,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/coreos/go-systemd/v22/activation"
+
 	"github.com/wk-y/rama-swap/ramalama"
 	"github.com/wk-y/rama-swap/server"
 )
@@ -57,12 +59,6 @@ func main() {
 		}
 	}
 
-	l, err := net.Listen("tcp", fmt.Sprintf("%s:%d", *args.Host, *args.Port))
-	if err != nil {
-		log.Fatalf("Failed to listen: %v", err)
-	}
-	defer l.Close()
-
 	ramalama := ramalama.Ramalama{
 		Command: args.Ramalama,
 	}
@@ -73,9 +69,36 @@ func main() {
 		return strings.ReplaceAll(s, "/", "_")
 	}
 
-	server.HandleHttp(http.DefaultServeMux)
+	// serve on all systemd sockets
+	listeners, err := activation.Listeners()
+	if err != nil {
+		log.Fatalf("Failed checking for socket activation: %v", err)
+	}
 
+	for i, listener := range listeners {
+		log.Printf("Listening on socket activation (%d)", i)
+		mux := http.NewServeMux()
+		server.HandleHttp(mux)
+
+		go func() {
+			defer listener.Close()
+
+			err = http.Serve(listener, mux)
+
+			log.Fatalf("Failed to serve: %v", err)
+		}()
+	}
+
+	// serve on the configured host/port
 	log.Printf("Listening on http://%s:%d\n", *args.Host, *args.Port)
+
+	l, err := net.Listen("tcp", fmt.Sprintf("%s:%d", *args.Host, *args.Port))
+	if err != nil {
+		log.Fatalf("Failed to listen: %v", err)
+	}
+	defer l.Close()
+
+	server.HandleHttp(http.DefaultServeMux)
 	err = http.Serve(l, nil)
 
 	log.Fatalf("Failed to serve: %v", err)
