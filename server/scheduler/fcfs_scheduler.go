@@ -1,4 +1,4 @@
-package server
+package scheduler
 
 import (
 	"context"
@@ -63,7 +63,7 @@ func (f *fcfsScheduler) Lock(ctx context.Context, model string) (*backend, error
 	if f.backend != nil && f.backendModel == model {
 		// if it is exited, don't return the backend
 		select {
-		case <-f.backend.exited:
+		case <-f.backend.Exited:
 		default:
 			f.backendUsers++
 			f.backendCond.Broadcast()
@@ -77,7 +77,7 @@ func (f *fcfsScheduler) Lock(ctx context.Context, model string) (*backend, error
 
 	if f.backend != nil {
 		f.backend.cancel()
-		<-f.backend.exited
+		<-f.backend.Exited
 		f.backend = nil
 	}
 
@@ -91,7 +91,7 @@ func (f *fcfsScheduler) Lock(ctx context.Context, model string) (*backend, error
 	select {
 	case <-ctx.Done():
 		return nil, errors.New("context cancelled")
-	case <-backend.ready:
+	case <-backend.Ready:
 		f.backendUsers++
 		return f.backend, nil
 	}
@@ -163,16 +163,16 @@ func (f *fcfsScheduler) startBackend(modelName string) (*backend, error) {
 		return nil, fmt.Errorf("failed to start ramalama: %v\n", err)
 	}
 
-	back.ready = make(chan struct{})
-	back.exited = make(chan struct{})
+	back.Ready = make(chan struct{})
+	back.Exited = make(chan struct{})
 
 	// waits for ready
 	go func() {
-		defer close(back.ready)
+		defer close(back.Ready)
 
 		for !back.healthCheck() {
 			select {
-			case <-back.exited:
+			case <-back.Exited:
 				return
 			default:
 			}
@@ -193,7 +193,7 @@ func (f *fcfsScheduler) startBackend(modelName string) (*backend, error) {
 		back.port = 0
 		back.portLock.Unlock()
 
-		close(back.exited) // must be after portLock unlock
+		close(back.Exited) // must be after portLock unlock
 
 		back.Unlock()
 	}()
@@ -222,7 +222,7 @@ func (f *fcfsScheduler) startIdleTimeout() {
 
 		log.Printf("Stopping backend after being idle for %v\n", f.idleTimeout)
 		f.backend.cancel()
-		<-f.backend.exited
+		<-f.backend.Exited
 		f.backend = nil
 	}
 }

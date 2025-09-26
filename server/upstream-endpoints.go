@@ -5,7 +5,6 @@ import (
 	"html"
 	"log"
 	"net/http"
-	"net/http/httputil"
 )
 
 func (s *Server) serveUpstream(w http.ResponseWriter, r *http.Request) {
@@ -25,16 +24,10 @@ func (s *Server) serveUpstream(w http.ResponseWriter, r *http.Request) {
 	}
 	defer s.scheduler.Unlock(backend)
 
-	<-backend.ready
-	proxy := httputil.ReverseProxy{
-		Rewrite: func(pr *httputil.ProxyRequest) {
-			*pr.Out.URL = *pr.In.URL
-			pr.Out.URL.Host = fmt.Sprintf("127.0.0.1:%v", backend.port)
-			pr.Out.URL.Path = "/" + r.PathValue("rest")
-			pr.Out.URL.Scheme = "http"
-		},
-	}
-	proxy.ServeHTTP(w, r)
+	<-backend.Ready
+
+	r.URL.Path = "/" + r.PathValue("rest")
+	backend.Proxy().ServeHTTP(w, r)
 }
 
 func (s *Server) serveUpstreamSelect(w http.ResponseWriter, r *http.Request) {

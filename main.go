@@ -13,6 +13,7 @@ import (
 
 	"github.com/wk-y/rama-swap/ramalama"
 	"github.com/wk-y/rama-swap/server"
+	"github.com/wk-y/rama-swap/server/scheduler"
 )
 
 const defaultPort = 4917
@@ -62,7 +63,7 @@ func main() {
 	ramalama := ramalama.Ramalama{
 		Command: args.Ramalama,
 	}
-	scheduler := server.NewFcfsScheduler(ramalama, 49170, *args.IdleTimeout)
+	scheduler := scheduler.NewFcfsScheduler(ramalama, 49170, *args.IdleTimeout)
 	server := server.NewServer(ramalama, scheduler)
 
 	server.ModelNameMangler = func(s string) string {

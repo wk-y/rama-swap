@@ -3,18 +3,15 @@ package server
 import (
 	"bytes"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
-	"net/http/httputil"
 	"sync"
 
-	"github.com/openai/openai-go/v2"
-	"github.com/openai/openai-go/v2/option"
 	"github.com/wk-y/rama-swap/internal/util"
 	"github.com/wk-y/rama-swap/ramalama"
+	"github.com/wk-y/rama-swap/server/scheduler"
 )
 
 type Server struct {
@@ -22,30 +19,18 @@ type Server struct {
 	BasePort         int // starting port number to use for underlying instances
 
 	ramalama  ramalama.Ramalama
-	scheduler ModelScheduler
+	scheduler scheduler.ModelScheduler
 
 	demangleCacheLock sync.RWMutex
 	demangleCache     map[string]string
 }
 
-func NewServer(r ramalama.Ramalama, scheduler ModelScheduler) *Server {
+func NewServer(r ramalama.Ramalama, scheduler scheduler.ModelScheduler) *Server {
 	return &Server{
 		ramalama:      r,
 		scheduler:     scheduler,
 		demangleCache: map[string]string{},
 	}
-}
-
-type backend struct {
-	sync.RWMutex
-	ready  chan struct{}
-	exited chan struct{}
-	// The port the backend is currently running on.
-	// A value of zero indicates no port is currently assigned.
-	port     int
-	portLock sync.RWMutex
-	err      error
-	cancel   func()
 }
 
 func (s *Server) HandleHttp(mux *http.ServeMux) {
@@ -89,18 +74,13 @@ func (s *Server) proxyEndpoint(w http.ResponseWriter, r *http.Request, modelFind
 	}
 	defer s.scheduler.Unlock(backend)
 
-	proxy := httputil.ReverseProxy{
-		Rewrite: func(pr *httputil.ProxyRequest) {
-			*pr.Out.URL = *pr.In.URL
-			pr.Out.URL.Host = fmt.Sprintf("127.0.0.1:%v", backend.port)
-			pr.Out.URL.Scheme = "http"
-			pr.Out.Body = util.ReadCloserWrapper{
-				Reader: io.MultiReader(&decoderRead, pr.In.Body),
-				Closer: pr.In.Body.Close,
-			}
-		},
+	body := r.Body
+	r.Body = util.ReadCloserWrapper{
+		Reader: io.MultiReader(&decoderRead, body),
+		Closer: body.Close,
 	}
-	proxy.ServeHTTP(w, r)
+
+	backend.Proxy().ServeHTTP(w, r)
 }
 
 func (s *Server) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
@@ -168,36 +148,4 @@ func (s *Server) handleModels(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.Printf("Failed to reply: %v\n", err)
 	}
-}
-
-func (b *backend) healthCheck() bool {
-	// /health is more accurate but might be llama-server specific
-	resp, err := http.Get(fmt.Sprintf("http://127.0.0.1:%v/health", b.port))
-	if err != nil {
-		return false
-	}
-	resp.Body.Close()
-	return resp.StatusCode == http.StatusOK
-}
-
-// WithClient runs callback with a client configured to use the backend.
-// Because the backend's port may be freed and reused by another backend,
-// it is not safe to save the client given to callback.
-func (b *backend) WithClient(callback func(openai.Client) error) error {
-	b.portLock.RLock()
-	defer b.portLock.RUnlock()
-
-	if b.port == 0 { // port was freed
-		return errors.New("backend is dead")
-	}
-
-	client := openai.NewClient(
-		option.WithAPIKey(""),
-		option.WithOrganization(""),
-		option.WithProject(""),
-		option.WithWebhookSecret(""),
-		option.WithBaseURL(fmt.Sprintf("http://127.0.0.1:%v", b.port)),
-	)
-
-	return callback(client)
 }
