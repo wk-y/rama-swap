@@ -5,26 +5,30 @@ It is designed to make using ramalama as easy as ollama.
 
 ## Running
 
-`rama-swap` can be run using standard go tooling.
-You will need to have ramalama installed on the host.
+`rama-swap` can be run as either a container image or directly on the host.
 
-```bash
-go run github.com/wk-y/rama-swap@latest
-```
+### Podman/Docker (recommended)
 
-## Podman/Docker
-
-`rama-swap` can be built to run in a container.
-In this mode, all model servers will run in the same container as well.
+The `rama-swap` docker image bundles `rama-swap` with ramalama's inference container image.
+All model inference servers will run inside one container.
 
 ```bash
 # run the container (you will need to add flags to enable gpu inference)
 podman run --rm -v ~/.local/share/ramalama:/app/store:ro,Z -p 127.0.0.1:4917:4917 ghcr.io/wk-y/rama-swap:master
 ```
 
-## Configuration
+### Without a container
 
-The `RAMALAMA_COMMAND` environment variable can be set to change the underlying command used (ex. `RAMALAMA_COMMAND="uvx ramalama"`)
+`rama-swap` can be built/run using standard go tooling.
+
+```bash
+go run github.com/wk-y/rama-swap@latest
+```
+
+### Command-Line Flags
+
+`rama-swap` supports a few command-line flags for configuration.
+See <HELP.txt> or run `rama-swap -help` for the list of supported flags.
 
 ## Endpoints
 
