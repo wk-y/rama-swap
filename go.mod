@@ -2,7 +2,7 @@ module github.com/wk-y/rama-swap
 
 go 1.25.1
 
-require github.com/openai/openai-go/v2 v2.4.0
+require github.com/openai/openai-go/v2 v2.7.0
 
 require (
 	github.com/coreos/go-systemd/v22 v22.6.0
