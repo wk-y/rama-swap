@@ -1,6 +1,6 @@
 # rama-swap
 
-`rama-swap` is a simple alternative to llama-swap that wraps ramalama.
+`rama-swap` is a simple alternative to llama-swap that wraps [ramalama](https://github.com/containers/ramalama).
 It is designed to make using ramalama as easy as ollama.
 
 ## Running
