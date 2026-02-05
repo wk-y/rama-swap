@@ -1,4 +1,4 @@
-FROM docker.io/golang:1.25.5@sha256:20b91eda7a9627c127c0225b0d4e8ec927b476fa4130c6760928b849d769c149 AS builder
+FROM docker.io/golang:1.26rc3@sha256:9726cb96e5091399368426abbecc807d7674ca62dc59757e4cc5bef96a9fd608 AS builder
 WORKDIR /rama-swap
 
 COPY go.mod go.sum ./
