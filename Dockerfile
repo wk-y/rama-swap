@@ -7,7 +7,7 @@ RUN go mod download
 COPY . .
 RUN CGO_ENABLED=0 go build -o rama-swap .
 
-FROM quay.io/ramalama/ramalama:0.16.0@sha256:37888df783a2c73a5f3f793a19eb59bd2d04b0d8d08daa6633733c6ce3059d13
+FROM quay.io/ramalama/ramalama:0.17.1@sha256:ac75cf0c63fbce6cf22b6fc7a238993f0a1172b10a8118f4e222abba36d1ba51
 COPY --from=builder /rama-swap/rama-swap /usr/local/bin/rama-swap
 
 ENTRYPOINT [ "env", "RAMALAMA_STORE=/app/store", "rama-swap", "-ramalama", "ramalama", "--nocontainer", ";", "-host", "0.0.0.0", "-port", "4917" ]
